@@ -30,7 +30,13 @@ SAFE_HOSTS = [
 
 class AutoBlockIP:
     def __init__(self) -> None:
-        self.WORK_DIR = Path(os.path.abspath(os.path.dirname(__file__)))
+        work_dir = os.environ.get('IPBLOCKER_HOME')
+        if work_dir:
+            self.WORK_DIR = Path(work_dir)
+        else:
+            self.WORK_DIR = Path.cwd()
+
+        self.WORK_DIR.mkdir(exist_ok=True)
         self.OUTPUT_DIR = self.WORK_DIR / "outputs"
 
         self.WHITELIST_FILE = self.WORK_DIR / "whitelist_ips.txt"

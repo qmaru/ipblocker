@@ -1,6 +1,6 @@
 [project]
 name = "ipblocker"
-version = "0.0.1"
+version = "0.0.2"
 description = "Block ip from nginx access log automatically"
 readme = "README.md"
 requires-python = ">=3.11"
