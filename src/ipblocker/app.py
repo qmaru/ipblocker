@@ -1,6 +1,7 @@
 import argparse
 import datetime
 import ipaddress
+import itertools
 import os
 import re
 import shutil
@@ -14,6 +15,7 @@ import ipblocker.config as config
 NGINX_ACCESS_LOG = config.NGINX_LOG_HOME / "access.log"
 BLOCKED_IPS_FILE = config.OUTPUT_DIR / "blocked_ips.txt"
 NFT_OUTPUT_FILE = config.OUTPUT_DIR / "blocked_ips.nft"
+NFT_BATCH_SIZE = 1000
 
 
 class AutoBlockIP:
@@ -112,23 +114,36 @@ class AutoBlockIP:
             for ip in sorted(ips):
                 f.write(f"{ip}\n")
 
+    def _iter_ip_batches(self, ipset: list[str], batch_size: int = NFT_BATCH_SIZE):
+        iterator = iter(ipset)
+        while batch := list(itertools.islice(iterator, batch_size)):
+            yield batch
+
+    def _build_nft_commands(self, action: str, ipset: list[str]) -> str:
+        commands = []
+        for batch in self._iter_ip_batches(ipset):
+            ips = ", ".join(batch)
+            commands.append(f"{action} element inet q_filter blocked_ips {{ {ips} }}")
+        return "\n".join(commands) + ("\n" if commands else "")
+
     def _write_nft_file(self, ipset: list[str], output_file: Path):
         with output_file.open("w", encoding="utf-8") as f:
             if not ipset:
                 f.write("# blocked_ips is empty\n")
                 return
 
-            ips = ", ".join(ipset)
-            f.write(f"add element inet q_filter blocked_ips {{ {ips} }}\n")
+            f.write(self._build_nft_commands("add", ipset))
 
     def _run_nft_command(self, action: str, ipset: list[str]) -> bool:
         if not ipset:
             return True
 
-        nft_elements = f"{{ {', '.join(ipset)} }}"
+        nft_commands = self._build_nft_commands(action, ipset)
         try:
             subprocess.run(
-                ["nft", action, "element", "inet", "q_filter", "blocked_ips", nft_elements],
+                ["nft", "-f", "-"],
+                input=nft_commands,
+                text=True,
                 check=True,
             )
         except FileNotFoundError:
